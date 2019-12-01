@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="generator" content="Hugo 0.60.1" />
+
+  <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="author" content="Littledriver&#39;s Blog" />
+  <meta property="og:url" content="https://littledriver.net/posts/understand-pod-concept/" />
+  <link rel="canonical" href="https://littledriver.net/posts/understand-pod-concept/" /><script type="application/ld+json">
+  {
+      "@context" : "http://schema.org",
+      "@type" : "BlogPosting",
+      "mainEntityOfPage": {
+           "@type": "WebPage",
+           "@id": "https:\/\/littledriver.net"
+      },
+      "articleSection" : "posts",
+      "name" : "The smallest schedulable unit in Kubernetes — Pod",
+      "headline" : "The smallest schedulable unit in Kubernetes — Pod",
+      "description" : "Overview As I have mentioned in the previous blog, lots of technologies the Kubernetes relies on are created with the help of the operating system. For example, the container is the specific process that corporates with the CGroup and Linux Namespace on OS. However, there is another essential OS concept used in Kubernetes: process group. It means one process group includes several processes. Those kinds of processes have a super affinity relationship.",
+      "inLanguage" : "en-US",
+      "author" : "Littledriver\x27s Blog",
+      "creator" : "Littledriver\x27s Blog",
+      "publisher": "Littledriver\x27s Blog",
+      "accountablePerson" : "Littledriver\x27s Blog",
+      "copyrightHolder" : "Littledriver\x27s Blog",
+      "copyrightYear" : "2019",
+      "datePublished": "2019-12-01 21:24:59 \x2b0900 JST",
+      "dateModified" : "2019-12-01 21:24:59 \x2b0900 JST",
+      "url" : "https:\/\/littledriver.net\/posts\/understand-pod-concept\/",
+      "keywords" : [ "container","kubernetes", ]
+  }
+</script>
+<title>The smallest schedulable unit in Kubernetes — Pod - Littledriver&#39;s Blog</title>
+  <meta property="og:title" content="The smallest schedulable unit in Kubernetes — Pod - Littledriver&#39;s Blog" />
+  <meta property="og:type" content="article" />
+  <meta name="description" content="Overview As I have mentioned in the previous blog, lots of technologies the Kubernetes relies on are created with the help of the operating system. For example, the container is the specific process that corporates with the CGroup and Linux Namespace on OS. However, there is another essential OS concept used in Kubernetes: process group. It means one process group includes several processes. Those kinds of processes have a super affinity relationship." />
+
+  <link rel="stylesheet" href="/css/flexboxgrid-6.3.1.min.css" />
+  <link rel="stylesheet"
+    href="/css/github-markdown.min.css" />
+  <link rel="stylesheet" href="/css/highlight/tomorrow.min.css" />
+  <link rel="stylesheet" href="/css/index.css">
+  <link href="/index.xml" rel="alternate" type="application/rss+xml" title="Littledriver&#39;s Blog">
+  
+  <link href="https://fonts.googleapis.com/css?family=Arvo|Permanent+Marker" rel="stylesheet">
+  
+  
+
+  
+</head>
+
+
+<body>
+  <article class="post English" id="article">
+    <div class="row">
+      <div class="col-xs-12 col-sm-10 col-md-8 col-sm-offset-1 col-md-offset-2 col-lg-6 col-lg-offset-3">
+        <div class="site-header">
+          
+<header>
+  <div class="signatures site-title">
+    <a href="/">Littledriver&#39;s Blog</a>
+  </div>
+</header>
+<div class="row end-xs">
+  
+  <div class="lang-switch col-xs-3 col-xs-offset-9">
+    <a href="/cn/">简体中文</a>
+  </div>
+  
+  
+  
+</div>
+<div class="header-line"></div>
+
+        </div>
+        <header class="post-header">
+          <h1 class="post-title">The smallest schedulable unit in Kubernetes — Pod</h1>
+          
+          <div class="row post-desc">
+            <div class="col-xs-6">
+              
+              <time class="post-date" datetime="2019-12-01 21:24:59 JST">
+                01 Dec 2019
+              </time>
+              
+            </div>
+            <div class="col-xs-6">
+              
+              <div class="post-author">
+                <a target="_blank" href="">@Littledriver&#39;s Blog</a>
+              </div>
+              
+            </div>
+          </div>
+          
+        </header>
+
+        <div class="post-content markdown-body">
+          <h1 id="overview">Overview</h1>
+<p>As I have mentioned in the previous blog,  lots of technologies the Kubernetes relies on are created with the help of the operating system. For example, the container is the specific process that corporates with the CGroup and Linux Namespace on OS. However, there is another essential OS concept used in Kubernetes: process group. It means one process group includes several processes. Those kinds of processes have a super affinity relationship. The <code>process group</code> is implemented as the <code>pod</code> in the Kubernetes.
+Besides, the CGroup and Linux Namespace can supply the service for a process group initially.</p>
+<h1 id="why-we-need-the-pod-containers-group-in-kubernetes">Why we need the Pod (containers group) in Kubernetes</h1>
+<p>You can imagine the scenario of scheduling multiple processes that belong to the same group.</p>
+<pre><code>// Group foo
+// There is a special requirement of scheduling processes:
+// A and B have to be scheduled into the same node.
+Process A -- 10CPU
+Process B -- 10CPU
+Process C -- 5 CPU
+
+// Node
+Node A -- 15 CPU
+Node B -- 20 CPU
+</code></pre><p>If the <code>Process A</code> and <code>Process C</code> were scheduled into the <code>Node A</code>, firstly,  the scheduler doesn’t know how to schedule the <code>Process B</code>. Because the CPU resource almost is consumed by <code>Process A</code> and <code>Process C</code>  and the scheduling rule requires the <code>Process A</code> and <code>Process B</code> must run on the same node. That is a significant problem. Our scheduler seems to pick up a lousy scheduling strategy.</p>
+<p>The root cause of the situation as above is the scheduler schedules processes belong to the same group separately. There is a super affinity relationship between <code>Process A</code> and <code>Process B</code>. We should handle them as a whole. So if you use the <code>container</code> instead of the <code>Process</code>, the same problem also happens in the Kubernetes world.</p>
+<p>Util now, I think we can create a new scheduling strategy to solve this problem. It is unnecessary to create a new special content in kubernetes. If you also has the same confusion with me, let’s go back to the <code>Process</code> in the operating system.</p>
+<p>When I perform the <code>pstree -g</code> command in my development VM, I captured the part of the result as below:</p>
+<pre><code>├-nvim(163523)─┬─gopls(163556)─┬─{gopls}(163556)
+    │          ├─{gopls}(163556)
+    │          ├─{gopls}(163556)
+    │          ├─{gopls}(163556)
+    │          ├─{gopls}(163556)
+    │          └─{gopls}(163556)
+    ├─node(163533)─┬─gopls(163533)─┬─{gopls}(163533)
+    │     │        ├─{gopls}(163533)
+    │     │        ├─{gopls}(163533)
+    │     │        └─{gopls}(163533)
+    │     ├─{node}(163533)
+    │     ├─{node}(163533)
+    │     └─{node}(163533)
+    └─{nvim}(163523)
+</code></pre><p>You can detect that there are so many processes corporate together to support the <code>nvim</code> work well.  And the process also needs multiple threads to corporate. The different processes (threads) play in different roles. But their target is the same:  finish all tasks when this process was performed in OS.</p>
+<p>Although the docker community advises that developers should make the <code>single container pattern</code> as a development standard during containerizing applications. We cannot implement a production-level service within one binary file. It must include many containers, and they need to corporate together to serve customers.  So, how to handle the affinity relationship among multiple containers and obey the container development pattern at the same time? The answer is: <code>Pod</code></p>
+<p><code>Pod</code> is a good proposal; it solves two problems as above: scheduling strategy and handling the affinity relationship.  <code>Pod</code> is a logic concept in Kubernetes.</p>
+<h1 id="how-to-implement-the-pod-in-kubernetes-">How to implement the <code>Pod</code> in Kubernetes ?</h1>
+<h2 id="for-scheduling-strategy">For scheduling strategy</h2>
+<p>For the scheduling strategy of <code>Pod</code>,  the Kubernetes define a pod template that includes many fields to organize multiple containers. Every container can specify its own resource requests and limits for computing resources. That means the requirement of computing resources of the <code>Pod</code> is the sum of requirements of containers.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml">apiVersion: v1
+kind: Pod
+metadata:
+  name: frontend
+spec:
+  containers:
+  - name: db
+    image: mysql
+    env:
+    - name: MYSQL_ROOT_PASSWORD
+      value: <span style="color:#e6db74">&#34;password&#34;</span>
+    resources:
+      requests:
+        memory: <span style="color:#e6db74">&#34;64Mi&#34;</span>
+        cpu: <span style="color:#e6db74">&#34;250m&#34;</span>
+      limits:
+        memory: <span style="color:#e6db74">&#34;128Mi&#34;</span>
+        cpu: <span style="color:#e6db74">&#34;500m&#34;</span>
+  - name: wp
+    image: wordpress
+    resources:
+      requests:
+        memory: <span style="color:#e6db74">&#34;64Mi&#34;</span>
+        cpu: <span style="color:#e6db74">&#34;250m&#34;</span>
+      limits:
+        memory: <span style="color:#e6db74">&#34;128Mi&#34;</span>
+        cpu: <span style="color:#e6db74">&#34;500m&#34;</span>
+
+</code></pre></div><h2 id="for-container-design-pattern">For container design pattern</h2>
+<p>The container design pattern usually means multiple containers need to share some resources for the corporation so that they can serve to users well. So, the first problem we need to solve is creating an environment that can let multiple containers share network, volume, etc. A direct thought is implementing it in the docker level.  We can specify the volume or network parameters when the container is started.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">docker run mysql --volume-from<span style="color:#f92672">=</span>web-server --network-from<span style="color:#f92672">=</span>web-server
+</code></pre></div><p>If we implement it as above, that means the <code>web-server</code> container needs to be started earlier than <code>mysql</code>. It breaks the equal relationship among containers that belong to the same pod. So we need to create another container.  It should be the first to be started. We call it <code>infra container</code> .</p>
+<h3 id="infra-container">Infra container</h3>
+<h4 id="principle">Principle</h4>
+<p>I draw the graph to help us understand the infra-container.</p>
+<p><img src="The%20smallest%20schedulable%20unit%20in%20Kubernetes%20%E2%80%94%20Pod%20(ep1)/729CEF17-3EB5-4DD9-BDA6-FD8D927E6A9E.png" alt=""></p>
+<p>Containers within the pod usually share the volume and network resources. For the network resource, infra-container creates its own Linux Network namespace firstly. The MySQL and web-server containers are added into the same Network Namespace when they were created. That means they can use the <code>localhost</code> to communicate with each other. If you can understand Mount Namespace and infra-container. You must know that the volume is implemented in the pod level (infra-container level). That means we can mount any volume into the infra-container. If the MySQL and web-server can share the Mount Namespace with the infra-container, they can see the same volume directory.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-yaml" data-lang="yaml">apiVersion: v1
+kind: Pod
+metadata:
+  name: frontend
+spec:
+  Mounts:
+    - name: share-data
+      hostPath:
+        path: /data
+  containers:
+  - name: db
+    image: mysql
+    volumeMounts:
+      - name: share-data
+        mountPath: /data
+    env:
+    - name: MYSQL_ROOT_PASSWORD
+      value: <span style="color:#e6db74">&#34;password&#34;</span>
+    resources:
+      requests:
+        memory: <span style="color:#e6db74">&#34;64Mi&#34;</span>
+        cpu: <span style="color:#e6db74">&#34;250m&#34;</span>
+      limits:
+        memory: <span style="color:#e6db74">&#34;128Mi&#34;</span>
+        cpu: <span style="color:#e6db74">&#34;500m&#34;</span>
+  - name: wp
+    image: wordpress
+    volumeMounts:
+      - name: share-data
+        mountPath: /data
+    resources:
+      requests:
+        memory: <span style="color:#e6db74">&#34;64Mi&#34;</span>
+        cpu: <span style="color:#e6db74">&#34;250m&#34;</span>
+      limits:
+        memory: <span style="color:#e6db74">&#34;128Mi&#34;</span>
+        cpu: <span style="color:#e6db74">&#34;500m&#34;</span>
+
+</code></pre></div><p>The example as above implement a volume directory on the host machine and mount it into the frontend pod. The volume directory can be seen by wordpress container and mysql container. Any container writes some data to the <code>/data</code> that can be shared with another container.</p>
+<h4 id="implementation">Implementation</h4>
+<p>If you try to run the command <code>docker ps</code>, you must see some containers that use the same image called <code>gcr.io/google_containers/pause</code></p>
+<p><img src="The%20smallest%20schedulable%20unit%20in%20Kubernetes%20%E2%80%94%20Pod%20(ep1)/C55377DA-80EC-4730-86D5-FA0E5EB4D043.png" alt=""></p>
+<p>The <code>pause</code> container’s lifecycle is the same as <code>pod</code>. The google company uses <code>pause</code> container to implement the concept of <code>infra-container</code>. You also can develop yours. <code>pause</code> container usually is responsible for two things:</p>
+<ol>
+<li>Creating a sharing environment for its children containers
+1. Linux Namespace(e.g. Linux Network Namespace)
+2. Volume</li>
+<li>Enable the Linux PID Namespaces among containers group by the pod. So the <code>pause</code> container can be the super parent process to help us recycle orphan containers.</li>
+</ol>
+<p>Actually, you can use <code>unshare</code> command to create a process in new Linux Namespaces.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">sudo unshare --pid --uts --ipc --mount -f chroot rootfs /bin/sh
+</code></pre></div><p>Because the child process usually inherits the Namespace from the parent process. If you use <code>unshare</code> command to create the new process, it creates its own Linux Namespace. It is too complicated to use original Linux commands to implement the <code>infra-container</code>.</p>
+<p>Apart from the sharing Namespace and volume, the pause container plays an important role: the super parent process. It will be responsible for reaping the zombie processes.</p>
+<blockquote>
+<p>zombie process is a kind of child process which has already finished all tasks, but the process’s item stayed in <code>process table</code> of the OS kernel. That means the parent process doesn’t clean it though call the <code>wait</code> function.</p>
+</blockquote>
+<p>Actually, there are two reasons that can cause the zombie process:</p>
+<ol>
+<li>The parent process forgets to call the <code>wait</code> system call.</li>
+<li>The parent process died before the child process, and the new parent process may don’t exist, or it doesn’t call the <code>wait</code>.</li>
+</ol>
+<p>For the first reason, I think we cannot resolve it. It depends on the developers. For the second reason, we can implement the <code>reaping</code> function on infra-container. Once their original parent process can not clean any child process run in the same pod, the super-parent process in infra-container recycles it. We need to enable PID namespace sharing among containers in the same pod for implementing this function.</p>
+<p>Here is the source code of <code>pause</code> container by Google:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-c" data-lang="c"><span style="color:#75715e">/*
+</span><span style="color:#75715e">Copyright 2016 The Kubernetes Authors.
+</span><span style="color:#75715e">Licensed under the Apache License, Version 2.0 (the &#34;License&#34;);
+</span><span style="color:#75715e">you may not use this file except in compliance with the License.
+</span><span style="color:#75715e">You may obtain a copy of the License at
+</span><span style="color:#75715e">    http://www.apache.org/licenses/LICENSE-2.0
+</span><span style="color:#75715e">Unless required by applicable law or agreed to in writing, software
+</span><span style="color:#75715e">distributed under the License is distributed on an &#34;AS IS&#34; BASIS,
+</span><span style="color:#75715e">WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+</span><span style="color:#75715e">See the License for the specific language governing permissions and
+</span><span style="color:#75715e">limitations under the License.
+</span><span style="color:#75715e">*/</span>
+
+<span style="color:#75715e">#</span><span style="color:#75715e">include</span> <span style="color:#75715e">&lt;signal.h&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span><span style="color:#75715e">#</span><span style="color:#75715e">include</span> <span style="color:#75715e">&lt;stdio.h&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span><span style="color:#75715e">#</span><span style="color:#75715e">include</span> <span style="color:#75715e">&lt;stdlib.h&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span><span style="color:#75715e">#</span><span style="color:#75715e">include</span> <span style="color:#75715e">&lt;sys/types.h&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span><span style="color:#75715e">#</span><span style="color:#75715e">include</span> <span style="color:#75715e">&lt;sys/wait.h&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span><span style="color:#75715e">#</span><span style="color:#75715e">include</span> <span style="color:#75715e">&lt;unistd.h&gt;</span><span style="color:#75715e">
+</span><span style="color:#75715e"></span>
+<span style="color:#66d9ef">static</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">sigdown</span>(<span style="color:#66d9ef">int</span> signo) {
+  psignal(signo, <span style="color:#e6db74"></span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">Shutting down, got signal</span><span style="color:#e6db74">&#34;</span>);
+  exit(<span style="color:#ae81ff">0</span>);
+}
+
+<span style="color:#66d9ef">static</span> <span style="color:#66d9ef">void</span> <span style="color:#a6e22e">sigreap</span>(<span style="color:#66d9ef">int</span> signo) {
+  <span style="color:#66d9ef">while</span> (waitpid(<span style="color:#f92672">-</span><span style="color:#ae81ff">1</span>, NULL, WNOHANG) <span style="color:#f92672">&gt;</span> <span style="color:#ae81ff">0</span>);
+}
+
+<span style="color:#66d9ef">int</span> <span style="color:#a6e22e">main</span>() {
+  <span style="color:#66d9ef">if</span> (getpid() <span style="color:#f92672">!</span><span style="color:#f92672">=</span> <span style="color:#ae81ff">1</span>)
+    <span style="color:#75715e">/* Not an error because pause sees use outside of infra containers. */</span>
+    fprintf(stderr, <span style="color:#e6db74"></span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">Warning: pause should be the first process</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>);
+
+  <span style="color:#66d9ef">if</span> (sigaction(SIGINT, <span style="color:#f92672">&amp;</span>(<span style="color:#66d9ef">struct</span> sigaction){.sa_handler <span style="color:#f92672">=</span> sigdown}, NULL) <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">0</span>)
+    <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">1</span>;
+  <span style="color:#66d9ef">if</span> (sigaction(SIGTERM, <span style="color:#f92672">&amp;</span>(<span style="color:#66d9ef">struct</span> sigaction){.sa_handler <span style="color:#f92672">=</span> sigdown}, NULL) <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">0</span>)
+    <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">2</span>;
+  <span style="color:#66d9ef">if</span> (sigaction(SIGCHLD, <span style="color:#f92672">&amp;</span>(<span style="color:#66d9ef">struct</span> sigaction){.sa_handler <span style="color:#f92672">=</span> sigreap,
+                                             .sa_flags <span style="color:#f92672">=</span> SA_NOCLDSTOP},
+                NULL) <span style="color:#f92672">&lt;</span> <span style="color:#ae81ff">0</span>)
+    <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">3</span>;
+
+  <span style="color:#66d9ef">for</span> (;;)
+    pause();
+  fprintf(stderr, <span style="color:#e6db74"></span><span style="color:#e6db74">&#34;</span><span style="color:#e6db74">Error: infinite loop terminated</span><span style="color:#ae81ff">\n</span><span style="color:#e6db74">&#34;</span>);
+  <span style="color:#66d9ef">return</span> <span style="color:#ae81ff">42</span>;
+}
+</code></pre></div><p>Through the example above, you can see that the pause will be the first(super parent) process of the Pod. If it catches the signal <code>SIGCHLD</code>, it calls <code>waited</code> to reap it. The most important is the pause process calls <code>pause</code> to wait signals during an infinity loop.</p>
+<h3 id="init--container">Init  container</h3>
+<p>In addition to the <code>infra-container</code>, there is another special container called <code>Init container</code>. It will be performed before others which are defined in spec.containers section of the pod. That means we can utilize this mechanism to do some preparations in advance, such as copy necessary files, performing the setting script, e.g.</p>
+<p>Besides, if you want to do some works before the container starts or stops, you can use the lifecycle of container: <a href="https://kubernetes.io/docs/concepts/containers/container-lifecycle-hooks/">Container Lifecycle Hooks - Kubernetes</a>.</p>
+<h3 id="examples-of-container-design-pattern">Examples of container design pattern</h3>
+<p>If you try to recall the solution of collecting the container logs, you can know that we use an another container design pattern <code>sidecar</code>.</p>
+<p><img src="The%20smallest%20schedulable%20unit%20in%20Kubernetes%20%E2%80%94%20Pod%20(ep1)/logging-with-sidecar-agent.png" alt=""></p>
+<p>We deploy a logging-agent container within the pod as a sidecar container, and it shares the same volume called <code>logging</code> with app-container. In the default situation,  the container outputs logs into the stdout. We can use the logging SDK in our service, and it output the logs into a file that stay in the persistent volume shared by logging-agent. The logging-agent can forward logs into remote logging service, such as elastic-search. Although, we cannot see logs of the container through <code>kubectl logs</code>. We can find another approach to resolve it: <a href="https://github.com/phusion/baseimage-docker">GitHub - phusion/baseimage-docker: A minimal Ubuntu base image modified for Docker-friendliness</a>. There is a logging service that was included in the base image, syslog-ng. It can help us redirect logs from the file too stdout. Generally, I prefer to find or develop a convenient base image with a small size for my services.</p>
+<h2 id="implement-the-pod-by-ourselves">Implement the Pod by ourselves</h2>
+<p>Let’s create the fake <code>pod</code> with the help of <code>pause</code> container.
+First of all, we can run a pause container:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">docker run -d --name pause -p 8080:80 gcr.io/google_containers/pause-amd64:3.0
+</code></pre></div><p>Then, we can run a blog application that shares resources with the <code>pause</code> container.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">docker run -d --name ghost --net<span style="color:#f92672">=</span>container:pause --ipc<span style="color:#f92672">=</span>container:pause --pid<span style="color:#f92672">=</span>container:pause ghost
+</code></pre></div><p>When we run the command <code>docker inspect &lt;ghost_container_id&gt;</code></p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">        <span style="color:#e6db74">&#34;Config&#34;</span>: <span style="color:#f92672">{</span>
+            <span style="color:#e6db74">&#34;Hostname&#34;</span>: <span style="color:#e6db74">&#34;52784ef438f9&#34;</span>,
+            <span style="color:#e6db74">&#34;Domainname&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+            <span style="color:#e6db74">&#34;User&#34;</span>: <span style="color:#e6db74">&#34;&#34;</span>,
+            <span style="color:#e6db74">&#34;AttachStdin&#34;</span>: false,
+            <span style="color:#e6db74">&#34;AttachStdout&#34;</span>: false,
+            <span style="color:#e6db74">&#34;AttachStderr&#34;</span>: false,
+            <span style="color:#e6db74">&#34;ExposedPorts&#34;</span>: <span style="color:#f92672">{</span>
+                <span style="color:#e6db74">&#34;2368/tcp&#34;</span>: <span style="color:#f92672">{</span><span style="color:#f92672">}</span>
+            <span style="color:#f92672">}</span>,
+            <span style="color:#e6db74">&#34;Tty&#34;</span>: false,
+            <span style="color:#e6db74">&#34;OpenStdin&#34;</span>: false,
+            <span style="color:#e6db74">&#34;StdinOnce&#34;</span>: false,
+            <span style="color:#e6db74">&#34;Env&#34;</span>: <span style="color:#f92672">[</span>
+                <span style="color:#e6db74">&#34;PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin&#34;</span>,
+                <span style="color:#e6db74">&#34;NODE_VERSION=10.17.0&#34;</span>,
+                <span style="color:#e6db74">&#34;YARN_VERSION=1.19.1&#34;</span>,
+                <span style="color:#e6db74">&#34;GOSU_VERSION=1.10&#34;</span>,
+                <span style="color:#e6db74">&#34;NODE_ENV=production&#34;</span>,
+                <span style="color:#e6db74">&#34;GHOST_CLI_VERSION=1.13.1&#34;</span>,
+                <span style="color:#e6db74">&#34;GHOST_INSTALL=/var/lib/ghost&#34;</span>,
+                <span style="color:#e6db74">&#34;GHOST_CONTENT=/var/lib/ghost/content&#34;</span>,
+                <span style="color:#e6db74">&#34;GHOST_VERSION=3.0.3&#34;</span>
+</code></pre></div><p>That means we can access the blog through the 2368 port. But we want to run another nginx container within the same Linux Network Namespace of ghost container. It is a more straightforward approach to help us detect the <code>Sharing Network Namespace</code>.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">docker run -d --name nginx -v <span style="color:#e6db74">`</span>pwd<span style="color:#e6db74">`</span>/nginx.conf:/etc/nginx/nginx.conf --net<span style="color:#f92672">=</span>container:pause --ipc<span style="color:#f92672">=</span>container:pause --pid<span style="color:#f92672">=</span>container:pause nginx
+</code></pre></div><p>The nginx config as below:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-nginx" data-lang="nginx"><span style="color:#66d9ef">error_log</span> <span style="color:#e6db74">stderr</span>;
+<span style="color:#66d9ef">events</span> { <span style="color:#f92672">worker_connections</span>  <span style="color:#ae81ff">1024</span>; }
+<span style="color:#66d9ef">http</span> {
+    <span style="color:#f92672">access_log</span> <span style="color:#e6db74">/dev/stdout</span> <span style="color:#e6db74">combined</span>;
+    <span style="color:#f92672">server</span> {
+        <span style="color:#f92672">listen</span> <span style="color:#ae81ff">80</span> <span style="color:#e6db74">default_server</span>;
+        <span style="color:#f92672">server_name</span> <span style="color:#e6db74">example.com</span> <span style="color:#e6db74">www.example.com</span>;
+        <span style="color:#f92672">location</span> <span style="color:#e6db74">/</span> {
+            <span style="color:#f92672">proxy_pass</span> <span style="color:#e6db74">http://127.0.0.1:2368</span>;
+        }
+    }
+}
+</code></pre></div><p>Now we can access the <code>http://localhost:8080</code> to access the ghost blog.</p>
+<p><img src="The%20smallest%20schedulable%20unit%20in%20Kubernetes%20%E2%80%94%20Pod%20(ep1)/2D37EECB-3FE2-4329-B55A-F7B332771CE2.png" alt=""></p>
+<p>There is a sharing topology among containers as above:</p>
+<ol>
+<li>Pause &lt;-&gt; Ghost</li>
+<li>Pause &lt;—&gt; Nginx</li>
+<li>Nginx &lt;—&gt; Ghost</li>
+</ol>
+<p>When you can see the home page of Ghost blog through accessing the port of Nginx server, those containers have shared the Linux Namespace.</p>
+<p><img src="The%20smallest%20schedulable%20unit%20in%20Kubernetes%20%E2%80%94%20Pod%20(ep1)/pause_container.png" alt=""></p>
+<p>Managing the lifetime and relationship of containers is too complex, so the kubernetes create <code>Pod</code> to help us do that.</p>
+<h1 id="summarize">Summarize</h1>
+<p>Finally, after you saw this blog, I want to tell you 3 things:</p>
+<ol>
+<li>It is better to understand any new concept of Kubernetes in the operating system perspective. Because the Kubernetes relies on lots of fundamental technologies of the operating system.</li>
+<li>Even if the small and basic concept like <code>Pod</code>, there are many pieces of knowledge can be learned.</li>
+<li>Don't learn too much about a particular concept, and knowledge has no end. Know what it is, why, and how it is enough.</li>
+</ol>
+<h1 id="reference">Reference</h1>
+<ul>
+<li><a href="https://www.ianlewis.org/en/almighty-pause-container">The Almighty Pause Container - Ian Lewis</a></li>
+</ul>
+
+        </div>
+        
+
+        
+
+
+        
+        
+        <div style="height: 50px;"></div>
+        
+        <div class="post-comments">
+          <div id="disqus_thread"></div>
+<script>
+  window.addEventListener("load", () => {
+    (function() {
+      
+      var d = document,
+        s = d.createElement("script");
+      s.src = "https://xuran.disqus.com/embed.js";
+      s.setAttribute("data-timestamp", +new Date());
+      (d.head || d.body).appendChild(s);
+    })();
+  });
+</script>
+<noscript
+  >Please enable JavaScript to view the
+  <a href="https://disqus.com/?ref_noscript"
+    >comments powered by Disqus.</a
+  ></noscript
+>
+
+        </div>
+        
+        
+
+        <div class="site-footer">
+  
+  <div class="site-footer-item">
+    <a href="/index.xml" target="_blank">RSS</a>
+  </div>
+  
+  <div class="site-footer-item">
+    <a href="/about" target="_blank">About</a>
+  </div>
+  
+  
+</div>
+
+      </div>
+    </div>
+  </article>
+
+  <script src="/js/highlight.pack.js"></script>
+
+
+<script>
+  hljs.initHighlightingOnLoad();
+  
+  
+  
+    
+    
+  
+</script>
+
+  
+
+</body>
+
+</html>

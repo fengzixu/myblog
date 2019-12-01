@@ -1,12 +1,12 @@
-<?xml version="1.0" encoding="utf-8" standalone="yes" ?>
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Tags on Littledriver&#39;s Blog</title>
     <link>https://littledriver.net/tags/</link>
     <description>Recent content in Tags on Littledriver&#39;s Blog</description>
     <generator>Hugo -- gohugo.io</generator>
-    <language>zh-cn</language>
-    <lastBuildDate>Sun, 15 Sep 2019 14:24:59 +0900</lastBuildDate>
+    <language>en-us</language>
+    <lastBuildDate>Sun, 01 Dec 2019 21:24:59 +0900</lastBuildDate>
     
 	<atom:link href="https://littledriver.net/tags/index.xml" rel="self" type="application/rss+xml" />
     
@@ -14,7 +14,7 @@
     <item>
       <title>container</title>
       <link>https://littledriver.net/tags/container/</link>
-      <pubDate>Sun, 15 Sep 2019 14:24:59 +0900</pubDate>
+      <pubDate>Sun, 01 Dec 2019 21:24:59 +0900</pubDate>
       
       <guid>https://littledriver.net/tags/container/</guid>
       <description></description>
@@ -23,7 +23,7 @@
     <item>
       <title>kubernetes</title>
       <link>https://littledriver.net/tags/kubernetes/</link>
-      <pubDate>Sun, 15 Sep 2019 14:24:59 +0900</pubDate>
+      <pubDate>Sun, 01 Dec 2019 21:24:59 +0900</pubDate>
       
       <guid>https://littledriver.net/tags/kubernetes/</guid>
       <description></description>
