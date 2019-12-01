@@ -139,7 +139,7 @@ docker commit 的实现原理也很简单，它在之前提到的镜像分层以
 
 我在自己的本地环境中，进行了一次构建新镜像的实验。以 busybox 镜像为例，在原生镜像中，使用 docker inspect 命令可以看到镜像只有一层
 
-```json
+```
         "RootFS": {
             "Type": "layers",
             "Layers": [
@@ -150,7 +150,7 @@ docker commit 的实现原理也很简单，它在之前提到的镜像分层以
 
 使用 busybox 镜像启动容器，并且尝试做一些修改。
 
-```bash
+```
 [root ~]$ sudo docker run -it busybox sh
 / # ls
 bin   dev   etc   home  proc  root  sys   tmp   usr   var
@@ -164,13 +164,13 @@ hello world
 
 然后，在宿主机上执行 docker commit 命令，生成一个名为 newbusybox 的新镜像：
 
-```bash
+```
  sudo docker commit 66f0c49b6948 newbusybox:1.0
 ```
 
 此时，再通过 docker inspect 查看这个新镜像的结构，可以发现，新的镜像多出来一个layer。而且，原有的 layer 的 hash 值也没有变。这证明，新镜像的构造是一次纯粹的『叠加』操作。
 
-```json
+```
         "RootFS": {
             "Type": "layers",
             "Layers": [
@@ -182,7 +182,7 @@ hello world
 
 最终，我们使用新的镜像启动一个新的容器，其内部果然能够看到我们之前作出的修改：
 
-```bash
+```
 [root ~]$ sudo docker run -it newbusybox:1.0 sh
 / # ls
 bin   dev   etc   home  proc  root  sys   test  tmp   usr   var
